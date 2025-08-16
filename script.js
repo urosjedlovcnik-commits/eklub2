@@ -1,4 +1,3 @@
-<script>
 (() => {
   // ===== Supabase inicializacija - VNESITE SVOJE PODATKE =====
   const SUPABASE_URL = 'https://tizjimlwfkoniixbetgr.supabase.co'; 
@@ -1012,4 +1011,3 @@
 
   init();
 })();
-</script>
