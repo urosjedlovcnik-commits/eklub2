@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Prisotnost plavalcev – koledar, prisotnost, CSV</title>
+<style>
+  :root{
+    --pri:#2563eb; --ok:#16a34a; --warn:#dc2626; --mut:#6b7280; --bg:#f5f7fa; --border:#e5e7eb;
+    --unfilled:#fecaca; --complete:#bbf7d0;
+  }
+  *{box-sizing:border-box}
+  body{font-family:system-ui, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:#0f172a; margin:30px 18px 18px;}
+  h1{margin:0 0 12px;text-align:center}
+  .toolbar{max-width:1200px;margin:0 auto 12px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center}
+  .btn{padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer;font-size:inherit}
+  .btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+  .btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+  .btn.warn{background:var(--warn);border-color:var(--warn);color:#fff}
+  .btn.neutral{background:#e5e7eb;border-color:#d1d5db;color:#4b5563;}
+  .tag{display:inline-block;background:#eef2ff;border:1px solid #c7d2fe;border-radius:999px;padding:3px 10px;font-size:13px}
+  .grid{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr;gap:12px}
+  /* Koledar (širok, nižji) */
+  .calendar{grid-column:1 / -1;background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px}
+  .calendar-head{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
+  .calendar-head div{font-weight:600;text-align:center;padding:6px 0;background:#eff6ff;border-radius:8px}
+  .calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .day{min-height:120px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:6px;display:flex;flex-direction:column;overflow:hidden; cursor:pointer;}
+  .day.disabled{background:#f3f4f6;color:#9ca3af;cursor:default;}
+  .day .num{font-weight:700; margin-bottom:4px}
+  .day.today{outline:3px solid #10b981;background:#ecfeff}
+  .event{font-size:12px;padding:3px 6px;margin:3px 0;border-radius:6px;background:#e3f2fd;border:1px solid #bfdbfe;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px}
+  .event .time{font-variant-numeric:tabular-nums}
+  .event.disabled{background:#e5e7eb;color:#6b7280;text-decoration:line-through;border-color:#d1d5db}
+  .event.unfilled{background:var(--unfilled); border-color:#fca5a5}
+  .event.complete{background:var(--complete); border-color:#86efac}
+  .card{background:#fff;border:1px solid var(--border);border-radius:12px}
+  .card h3{margin:0;padding:10px 12px;border-bottom:1px solid var(--border)}
+  .card .inner{padding:12px}
+  .muted{color:var(--mut)}
+  table{width:100%;border-collapse:collapse}
+  th,td{border:1px solid var(--border);padding:6px;text-align:left}
+  th{background:#eff6ff}
+  input[type="text"], input[type="date"], input[type="time"], select, textarea{padding:8px;border:1px solid var(--border);border-radius:8px;width:100%;margin-top:4px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+  .flex-col{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+  /* Modal */
+  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;padding:18px;z-index:100}
+  .modal .box{background:#fff;border-radius:12px;max-width:680px;width:100%;border:1px solid var(--border);box-shadow:0 10px 30px rgba(0,0,0,.15); position:fixed; top:10%; left:50%; transform:translate(-50%, 0);}
+  .modal .box-header{display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px}
+  .modal .box-body{padding:12px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{background:#f1f5f9;border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:12px}
+  .csv-options{max-width:1200px;margin:12px auto;padding:12px;background:#fff;border:1px solid var(--border);border-radius:12px;}
+  .csv-options .inner{padding:12px}
+  .csv-export-controls{
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 12px;
+  }
+  .csv-export-controls > * {
+    flex-grow: 1;
+  }
+  .csv-export-controls .btn {
+    flex-grow: 0;
+  }
+
+  /* Stil za gumb Odstrani/križec */
+  .btn.remove-btn {
+    background: none;
+    border: none;
+    color: var(--warn);
+    line-height: 1;
+    padding: 0;
+  }
+  .btn.remove-btn:hover {
+    color: var(--warn);
+    opacity: 0.8;
+  }
+  .btn.remove-btn:disabled {
+    color: #9ca3af;
+  }
+  .term-list{display:flex;flex-direction:column;gap:6px;padding:8px 0;border-top:1px solid var(--border);margin-top:8px}
+  .term-item{display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;padding:6px 10px;border-radius:8px}
+  .term-item button { flex-shrink: 0; }
+  .term-item-info { display: flex; flex-direction: column; gap: 2px; }
+  .term-item-label { font-weight: 600; }
+  .term-item-dates { font-size: 12px; color: var(--mut); }
+
+  /* Dodaten modal za izbiro termina na določen dan */
+  .day-modal .day-modal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* MEDIA QUERIES ZA MOBILNO ODZIVnost */
+  @media (max-width: 768px) {
+    body { margin: 10px; font-size: 14px; }
+    h1 { font-size: 24px; }
+    .toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
+    .toolbar .left, .toolbar .right { display: flex; flex-direction: row; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    .grid { grid-template-columns: 1fr; }
+    .calendar-head { font-size: 12px; }
+    .day { 
+      min-height: 90px; /* Znižana višina za več vsebine na mobilnih napravah */
+      padding: 4px;
+      overflow: hidden;
+    }
+    .day .num { font-size: 14px; }
+    .event { 
+      font-size: 10px; 
+      padding: 2px 4px;
+    }
+    .event .time {
+      font-size: 10px;
+    }
+    .day:not(.disabled) .event:nth-child(n+4) {
+      display: none;
+    }
+    .more-events-indicator {
+      font-size: 12px;
+      text-align: center;
+      margin-top: 4px;
+      color: var(--mut);
+    }
+    .card h3 { font-size: 16px; padding: 8px 10px; }
+    .card .inner { padding: 8px; }
+    .btn { padding: 6px 10px; font-size: 13px; }
+    .modal .box { max-width: 95%; top: 10%; transform: translate(-50%, 0); }
+    .modal .box-header { flex-direction: column; align-items: flex-start; }
+    .modal .box-header .row { flex-wrap: wrap; margin-top: 8px; }
+    input[type="text"], input[type="date"], input[type="time"], select { font-size: 14px; }
+    .csv-options .inner{ flex-direction: column; gap: 8px; }
+    .csv-export-controls{ flex-direction: column; gap: 8px; }
+    .csv-export-controls > * { width: 100%; }
+  }
+
+</style>
+</head>
+<body>
+  <h1>Prisotnost plavalcev</h1>
+
+  <div class="toolbar">
+    <button class="btn" id="prevBtn">◀ Prejšnji mesec</button>
+    <span class="tag" id="monthLabel"></span>
+    <button class="btn" id="nextBtn">Naslednji mesec ▶</button>
+  </div>
+
+  <div class="calendar">
+    <div class="calendar-head">
+      <div>Pon</div><div>Tor</div><div>Sre</div><div>Čet</div><div>Pet</div><div>Sob</div><div>Ned</div>
+    </div>
+    <div class="calendar-grid" id="calendarGrid"></div>
+  </div>
+
+  <div class="grid" style="margin-top:12px">
+    <div class="card">
+      <h3>Povzetek udeležbe (za prikazani mesec)</h3>
+      <div class="inner" id="summaryBox">Nalaganje podatkov...</div>
+    </div>
+
+    <div class="card">
+      <h3>Upravljanje plavalcev</h3>
+      <div class="inner">
+        <div class="flex-col">
+          <div class="row" style="width:100%;align-items:stretch;gap:4px">
+            <input type="text" id="newFirst" placeholder="Ime">
+            <input type="text" id="newLast" placeholder="Priimek">
+            <button class="btn ok" id="addSwimmerBtn" style="width:auto">Dodaj</button>
+          </div>
+          <div class="row" style="width:100%;align-items:stretch;gap:4px">
+            <select id="swimmerSelect"></select>
+            <select id="termSelect"></select>
+            <button class="btn pri" id="assignTermBtn" style="width:auto">Dodeli</button>
+            <button class="btn warn" id="removeTermBtn" style="width:auto">Odstrani</button>
+          </div>
+        </div>
+        <div id="swimmerInfo" class="muted"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid" style="margin-top:12px">
+    <div class="card">
+      <h3>Dodaj nov termin</h3>
+      <div class="inner">
+        <div class="row">
+          <label for="newTermDay">Dan:</label>
+          <select id="newTermDay">
+            <option value="1">Ponedeljek</option>
+            <option value="2">Torek</option>
+            <option value="3">Sreda</option>
+            <option value="4">Četrtek</option>
+            <option value="5">Petek</option>
+            <option value="6">Sobota</option>
+            <option value="7">Nedelja</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="newTermStart">Začetna ura:</label>
+          <input type="time" id="newTermStart">
+        </div>
+        <div class="row">
+          <label for="newTermEnd">Končna ura:</label>
+          <input type="time" id="newTermEnd">
+        </div>
+        <div class="row">
+          <label for="newTermDateFrom">Datum trajanja od:</label>
+          <input type="text" id="newTermDateFrom" placeholder="dd / mm / yyyy">
+        </div>
+        <div class="row">
+          <label for="newTermDateTo">do:</label>
+          <input type="text" id="newTermDateTo" placeholder="dd / mm / yyyy">
+        </div>
+        <button class="btn pri" id="addTermBtn">Dodaj termin</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Upravljanje terminov</h3>
+      <div class="inner">
+        <div class="term-list" id="termList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="eventModal" aria-hidden="true">
+    <div class="box">
+      <div class="box-header">
+        <div>
+          <strong id="modalTitle">Trening</strong>
+          <div class="chips" id="modalMeta"></div>
+        </div>
+        <div class="row">
+          <button class="btn warn" id="toggleEventBtn">Deaktiviraj/Aktiviraj</button>
+          <button class="btn" id="closeModalBtn">Zapri</button>
+        </div>
+      </div>
+      <div class="box-body">
+        <div id="inactiveNote" style="display:none; margin-bottom:12px; padding:10px; background:#fef3c7; border-radius:8px; border:1px solid #fcd34d;">
+          <strong style="display:block; margin-bottom:4px;">Opomba:</strong>
+          <span id="inactiveNoteText"></span>
+        </div>
+        <table id="attendanceTable">
+          <thead><tr><th>Plavalec</th><th>Prisotnost</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <hr style="margin:12px 0;border:none;border-top:1px solid var(--border)">
+        <h4>Dodaj plavalca v ta trening</h4>
+        <div class="row">
+          <select id="modalSwimmerSelect"></select>
+          <button class="btn ok" id="addToEventBtn">Dodaj plavalca</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal day-modal" id="dayModal" aria-hidden="true">
+    <div class="box">
+      <div class="box-header">
+        <strong id="dayModalTitle">Izberi termin</strong>
+        <button class="btn" id="closeDayModalBtn">Zapri</button>
+      </div>
+      <div class="box-body">
+        <div id="dayModalList" class="day-modal-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="editTermModal" aria-hidden="true">
+    <div class="box">
+      <div class="box-header">
+        <strong id="editTermModalTitle">Uredi termin</strong>
+        <button class="btn" id="closeEditTermModalBtn">Zapri</button>
+      </div>
+      <div class="box-body">
+        <div class="row">
+          <label for="editTermDateFrom">Datum trajanja od:</label>
+          <input type="text" id="editTermDateFrom" placeholder="dd / mm / yyyy">
+        </div>
+        <div class="row">
+          <label for="editTermDateTo">do:</label>
+          <input type="text" id="editTermDateTo" placeholder="dd / mm / yyyy">
+        </div>
+        <button class="btn pri" id="saveEditTermBtn">Shrani</button>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="card csv-options">
+    <h3>Uvoz in izvoz CSV</h3>
+    <div class="inner">
+      <h4>Uvoz plavalcev</h4>
+      <p class="muted">
+        Uvožena CSV datoteka mora v glavi vsebovati stolpce <code>first_name</code>, <code>last_name</code> in <code>terms</code>.
+        V stolpec <code>terms</code> lahko vpišete več terminov, ločenih z vejico (npr. <code>pon-17:00-18:00,sre-18:00-19:00</code>).
+        <br><br>
+        <strong>Opomba:</strong> Uvožena datoteka mora uporabljati vejico (`,`) kot ločilo med stolpci.
+        <br>
+        <strong>Primer:</strong>
+        <pre style="background:#f1f5f9; padding:8px; border-radius:6px; overflow-x:auto;">
+first_name,last_name,terms
+Janez,Novak,"pon-17:00-18:00,sre-18:00-19:00,pet-19:00-20:00"
+        </pre>
+      </p>
+      <div class="row" style="margin-top:0">
+        <label class="btn">
+          Uvozi plavalce
+          <input type="file" id="csvInput" accept=".csv" style="display:none">
+        </label>
+      </div>
+      <hr style="border:none; border-top:1px solid var(--border); margin: 12px 0;">
+      
+      <h4>Uvoz terminov</h4>
+      <p class="muted">
+        Uvožena CSV datoteka mora v glavi vsebovati stolpce <code>id</code>, <code>day</code>, <code>start_time</code>, <code>end_time</code>, <code>date_from</code> in <code>date_to</code>.
+        Datum mora biti v formatu <code>dd / mm / yyyy</code>.
+        <br><br>
+        <strong>Opomba:</strong> Obstoječi termini z istim ID-jem bodo prepisani.
+        <br>
+        <strong>Primer:</strong>
+        <pre style="background:#f1f5f9; padding:8px; border-radius:6px; overflow-x:auto;">
+id,day,start_time,end_time,date_from,date_to
+pon-17:00-18:00,1,17:00,18:00,"01 / 09 / 2024","31 / 05 / 2025"
+sre-18:00-19:00,3,18:00,19:00,"01 / 09 / 2024","31 / 05 / 2025"
+        </pre>
+      </p>
+      <div class="row" style="margin-top:0">
+        <label class="btn">
+          Uvozi termine
+          <input type="file" id="csvTermsInput" accept=".csv" style="display:none">
+        </label>
+      </div>
+      <hr style="border:none; border-top:1px solid var(--border); margin: 12px 0;">
+
+      <h4>Izvoz povzetka</h4>
+      <div class="csv-export-controls">
+        <select id="exportMonthSelect"></select>
+        <select id="exportYearSelect"></select>
+        <button class="btn" id="exportCsvBtn">Izvozi</button>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./script.js"></script>
+</body>
+</html>
